@@ -7,6 +7,7 @@ export type KeywordCategory = 'brand' | 'product' | 'store' | 'ambassador' | 'co
 export type ShiftType = 'morning' | 'evening';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 export type SnapshotType = 'shift_start' | 'manual_refresh' | 'mark_risk' | 'generate_summary';
+export type RiskTrackStatus = 'just_marked' | 'fast_rising' | 'stable' | 'falling';
 
 export interface Keyword {
   id: string;
@@ -122,6 +123,29 @@ export interface ContactedDept {
   responsible: string;
 }
 
+export interface SnapshotNode {
+  snapshot: PlaySnapshot;
+  topEntries: Array<{
+    videoId: string;
+    videoTitle: string;
+    coverUrl: string;
+    platform: Platform;
+    videoUrl: string;
+    playCount: number;
+    delta: number;
+    deltaPercent: number;
+    prevPlayCount: number;
+  }>;
+}
+
+export interface VideoTrack {
+  record: RiskRecord;
+  trackStatus: RiskTrackStatus;
+  latestDelta: number;
+  latestDeltaPercent: number;
+  curvePoints: Array<{ at: number; playCount: number }>;
+}
+
 export interface HandoverSummary {
   id: string;
   date: string;
@@ -133,6 +157,8 @@ export interface HandoverSummary {
   topGrowers: TopGrower[];
   playSnapshots: PlaySnapshot[];
   videoSnapshots: Record<string, VideoSnapshot>;
+  snapshotNodes: SnapshotNode[];
+  videoTracks: VideoTrack[];
   sentimentStats: { positive: number; neutral: number; negative: number };
   contactedDepartments: ContactedDept[];
   nextShiftFocus: string[];
@@ -152,6 +178,13 @@ export interface CreateRiskPayload {
   opinion: string;
   operator: string;
 }
+
+export const RISK_TRACK_STATUS_META: Record<RiskTrackStatus, { name: string; color: string; bg: string; icon: string }> = {
+  just_marked: { name: '刚标记', color: 'text-white', bg: 'bg-blue-500', icon: '🆕' },
+  fast_rising: { name: '快速上涨', color: 'text-white', bg: 'bg-risk-urgent', icon: '📈' },
+  stable: { name: '增速平稳', color: 'text-white', bg: 'bg-risk-low', icon: '➡️' },
+  falling: { name: '热度下降', color: 'text-white', bg: 'bg-slate-500', icon: '📉' },
+};
 
 export const SNAPSHOT_LABEL: Record<SnapshotType, string> = {
   shift_start: '班次开始',

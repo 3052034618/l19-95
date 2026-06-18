@@ -1,7 +1,7 @@
-import { Search, AlertTriangle, ClipboardList, FileText, RefreshCw } from 'lucide-react';
+import { Search, AlertTriangle, ClipboardList, FileText, RefreshCw, Hash } from 'lucide-react';
 
 interface Props {
-  variant?: 'search' | 'risk' | 'empty' | 'handover';
+  variant?: 'search' | 'risk' | 'empty' | 'handover' | 'keywords';
   title?: string;
   description?: string;
   action?: React.ReactNode;
@@ -16,6 +16,11 @@ const presetMap = {
     title: '待生成交接班摘要',
     description: '点击右上角「生成交班摘要」按钮，系统将自动汇总本班次高风险视频、播放量变化、评论情绪及跨部门协同记录，生成标准化交班文本，方便下一班快速接棒，不用再在群里翻聊天记录。',
     Icon: FileText,
+  },
+  keywords: {
+    title: '请先启用巡检关键词',
+    description: '请在左侧关键词管理面板添加或启用至少一个巡检词（品牌名、产品别称、门店简称、代言人或竞品词），系统将围绕这些关键词自动匹配视频、生成热词云和传播预警。',
+    Icon: Hash,
   },
 };
 

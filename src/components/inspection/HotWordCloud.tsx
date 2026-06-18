@@ -7,7 +7,26 @@ import { cn } from '@/lib/utils';
 
 export default function HotWordCloud() {
   const hotWords = useAppStore(s => s.hotWords);
+  const keywords = useAppStore(s => s.config.keywords);
   const [hovered, setHovered] = useState<HotWord | null>(null);
+
+  const enabledKeywordTexts = keywords.filter(k => k.enabled).map(k => k.text);
+
+  if (enabledKeywordTexts.length === 0) {
+    return (
+      <div className="rounded-lg border border-monitor-border bg-monitor-card p-5 animate-fade-in" style={{ animationDelay: '240ms' }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Hash size={16} className="text-brand-blue" />
+          <h3 className="text-sm font-semibold text-slate-200">评论热词云</h3>
+        </div>
+        <div className="text-center py-10 text-monitor-muted text-sm">
+          <Hash size={24} className="mx-auto mb-2 opacity-40" />
+          <p>请先启用巡检关键词</p>
+          <p className="text-xs mt-1 opacity-70">启用后将自动生成相关视频的评论热词</p>
+        </div>
+      </div>
+    );
+  }
 
   if (hotWords.length === 0) {
     return (

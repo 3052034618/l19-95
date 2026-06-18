@@ -11,7 +11,9 @@ export default function SpreadAlertCard() {
   const selectVideo = useAppStore(s => s.selectVideo);
   const navigate = useNavigate();
 
-  if (keywords.length === 0) {
+  const enabledKeywordTexts = keywords.filter(k => k.enabled).map(k => k.text);
+
+  if (enabledKeywordTexts.length === 0) {
     return (
       <div className="rounded-lg border border-risk-urgent/30 bg-monitor-card overflow-hidden animate-fade-in" style={{ animationDelay: '300ms' }}>
         <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-risk-urgent/20 via-risk-high/10 to-transparent border-b border-risk-urgent/20">
@@ -24,7 +26,9 @@ export default function SpreadAlertCard() {
           <TrendingUp size={15} className="text-risk-high" />
         </div>
         <div className="p-8 text-center text-monitor-muted text-sm">
-          添加巡检关键词后，传播苗头预警将自动刷新
+          <Zap size={24} className="mx-auto mb-2 opacity-40" />
+          <p>请先启用巡检关键词</p>
+          <p className="text-xs mt-1 opacity-70">启用后将自动监测传播苗头视频</p>
         </div>
       </div>
     );

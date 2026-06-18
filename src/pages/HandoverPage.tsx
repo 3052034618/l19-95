@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, History, FileSearch, Eye, Sparkles } from 'lucide-react';
+import { ArrowLeft, RefreshCw, History, FileSearch, Eye, Sparkles, TrendingUp, Clock } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { SHIFT_META, type ShiftType, type HandoverSummary, type Video } from '@/types';
 import { formatDateTime, formatNumber, formatRelativeTime, formatPercent } from '@/utils/format';
@@ -12,6 +12,9 @@ import { SentimentChart } from '@/components/handover/SentimentChart';
 import { CollaborationTimeline } from '@/components/handover/CollaborationTimeline';
 import { SummaryExportPanel } from '@/components/handover/SummaryExportPanel';
 import { TopGrowersCard } from '@/components/handover/TopGrowersCard';
+import { SnapshotTimeline } from '@/components/handover/SnapshotTimeline';
+import { RiskTrackCard } from '@/components/handover/RiskTrackCard';
+import { HistoryFilterPanel } from '@/components/handover/HistoryFilterPanel';
 import { cn } from '@/lib/utils';
 
 export default function HandoverPage() {
@@ -36,6 +39,7 @@ export default function HandoverPage() {
     currentShiftSummary?.id || null
   );
   const [showHistory, setShowHistory] = useState(false);
+  const [filteredSummaries, setFilteredSummaries] = useState<HandoverSummary[]>(summaries);
 
   const highRiskCount = riskRecords.filter(
     r => r.riskLevel === 'high' || r.riskLevel === 'urgent'
@@ -168,14 +172,24 @@ export default function HandoverPage() {
               <FileSearch className="w-4 h-4" />
               历史交接班记录
             </h4>
-            <span className="text-xs text-slate-500">共 {summaries.length} 条</span>
+            <div className="flex items-center gap-2">
+              <HistoryFilterPanel
+                summaries={summaries}
+                onFilterChange={setFilteredSummaries}
+              />
+              <span className="text-xs text-slate-500">
+                共 {filteredSummaries.length}/{summaries.length} 条
+              </span>
+            </div>
           </div>
 
-          {summaries.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-sm">暂无历史记录</div>
+          {filteredSummaries.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              {summaries.length === 0 ? '暂无历史记录' : '未找到符合筛选条件的记录'}
+            </div>
           ) : (
             <div className="grid gap-2 max-h-64 overflow-y-auto custom-scrollbar">
-              {summaries.map(s => {
+              {filteredSummaries.map(s => {
                 const meta = SHIFT_META[s.shiftType];
                 const isActive = activeSummary?.id === s.id;
                 return (
@@ -287,7 +301,54 @@ export default function HandoverPage() {
             onOpenVideo={handleOpenVideo}
           />
 
+          {activeSummary.videoTracks && activeSummary.videoTracks.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={16} className="text-keyword-ambassador" />
+                <h3 className="text-sm font-semibold text-slate-200">高风险视频持续跟踪</h3>
+                <span className="text-[11px] text-monitor-muted font-mono">
+                  共 {activeSummary.videoTracks.length} 条
+                </span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {activeSummary.videoTracks.map(track => (
+                  <RiskTrackCard
+                    key={track.record.id}
+                    track={track}
+                    onOpenVideo={() => {
+                      const snap = track.record.videoSnapshot;
+                      const video: Video = {
+                        id: snap.videoId,
+                        platform: snap.platform,
+                        title: snap.title,
+                        coverUrl: snap.coverUrl,
+                        videoUrl: snap.videoUrl,
+                        authorName: snap.authorName,
+                        authorAvatar: '',
+                        publishedAt: snap.snapshotAt,
+                        playCount: snap.playCount,
+                        likeCount: snap.likeCount,
+                        commentCount: snap.commentCount,
+                        shareCount: snap.shareCount,
+                        matchedKeywords: [],
+                        spreadScore: snap.spreadScore,
+                        negativeRate: snap.negativeRate,
+                        hotComments: [],
+                        isNew: false,
+                      };
+                      handleOpenVideo(video);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <TopGrowersCard growers={activeSummary.topGrowers || []} />
+
+          {activeSummary.snapshotNodes && activeSummary.snapshotNodes.length > 0 && (
+            <SnapshotTimeline nodes={activeSummary.snapshotNodes} />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <SentimentChart stats={activeSummary.sentimentStats} />

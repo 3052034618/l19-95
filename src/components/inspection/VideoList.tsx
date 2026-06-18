@@ -15,12 +15,14 @@ export default function VideoList() {
   const [sortBy, setSortBy] = useState<SortKey>('time');
   const [onlySuspicious, setOnlySuspicious] = useState(false);
 
+  const enabledKeywordTexts = keywords.filter(k => k.enabled).map(k => k.text);
+
   const totalPlay = videos.reduce((s, v) => s + v.playCount, 0);
   const totalComments = videos.reduce((s, v) => s + v.commentCount, 0);
   const suspiciousCount = videos.filter(v => v.spreadScore >= 80 || v.negativeRate >= 0.4).length;
   const newCount = videos.filter(v => v.isNew).length;
 
-  if (keywords.length === 0) {
+  if (enabledKeywordTexts.length === 0) {
     return (
       <div className="space-y-4 animate-fade-in" style={{ animationDelay: '180ms' }}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -29,11 +31,7 @@ export default function VideoList() {
           <StatCard label="总播放" value={0} icon={<Video size={16} />} color="purple" formatFn={formatNumber} />
           <StatCard label="可疑内容" value={0} suffix="条" icon={<Flame size={16} />} color="red" />
         </div>
-        <EmptyState
-          variant="search"
-          title="请先添加巡检关键词"
-          description="在左侧关键词管理面板添加品牌名、产品别称、门店简称、代言人或竞品词后，视频列表将自动按关键词刷新"
-        />
+        <EmptyState variant="keywords" />
       </div>
     );
   }

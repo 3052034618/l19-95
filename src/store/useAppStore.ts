@@ -3,9 +3,10 @@ import type {
   Keyword, KeywordCategory, Platform, Video, HotWord, VideoSnapshot, PlayHistoryPoint,
   RiskRecord, RiskLevel, RiskType, HandleStatus, Department,
   CreateRiskPayload, HandoverSummary, ShiftType, InspectionConfig,
-  ContactedDept, PlaySnapshot, SnapshotType, TopGrower
+  ContactedDept, PlaySnapshot, SnapshotType, TopGrower,
+  SnapshotNode, VideoTrack, RiskTrackStatus
 } from '@/types';
-import { SNAPSHOT_LABEL } from '@/types';
+import { SNAPSHOT_LABEL, RISK_TRACK_STATUS_META } from '@/types';
 import { generateDefaultKeywords, generateVideos, generateHotWords, generateSampleRiskRecords } from '@/data/mockData';
 import { generateId } from '@/utils/format';
 import { loadFromStorage, saveToStorage } from '@/utils/storage';
@@ -121,6 +122,127 @@ function normalizeRiskRecord(r: any, videosMap: Map<string, Video>): RiskRecord 
   };
 }
 
+function getRiskTrackStatus(playHistory: PlayHistoryPoint[]): RiskTrackStatus {
+  if (playHistory.length < 2) return 'just_marked';
+  const recent = playHistory.slice(-Math.min(playHistory.length, 4));
+  const deltas: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    const delta = recent[i].playCount - recent[i - 1].playCount;
+    const percent = recent[i - 1].playCount > 0 ? delta / recent[i - 1].playCount : 0;
+    deltas.push(percent);
+  }
+  const avgDelta = deltas.reduce((s, d) => s + d, 0) / deltas.length;
+  const latestDelta = deltas[deltas.length - 1] || 0;
+  if (playHistory.length <= 2 && Math.abs(avgDelta) < 0.05) return 'just_marked';
+  if (latestDelta > 0.2 || avgDelta > 0.15) return 'fast_rising';
+  if (latestDelta < -0.05) return 'falling';
+  return 'stable';
+}
+
+function buildVideoTrack(record: RiskRecord): VideoTrack {
+  const latestPc = record.playHistory[record.playHistory.length - 1]?.playCount || record.currentPlayCount;
+  const delta = latestPc - record.initialPlayCount;
+  const deltaPercent = record.initialPlayCount > 0 ? delta / record.initialPlayCount : 0;
+  return {
+    record,
+    trackStatus: getRiskTrackStatus(record.playHistory),
+    latestDelta: delta,
+    latestDeltaPercent: deltaPercent,
+    curvePoints: record.playHistory.map(p => ({ at: p.at, playCount: p.playCount })),
+  };
+}
+
+function buildSnapshotNodes(
+  playSnapshots: PlaySnapshot[],
+  videos: Video[],
+  videoSnapshotsMap: Record<string, VideoSnapshot>
+): SnapshotNode[] {
+  const allVideosMap = new Map(videos.map(v => [v.id, v]));
+  Object.values(videoSnapshotsMap).forEach(snap => {
+    if (!allVideosMap.has(snap.videoId)) {
+      allVideosMap.set(snap.videoId, {
+        id: snap.videoId,
+        platform: snap.platform,
+        title: snap.title,
+        coverUrl: snap.coverUrl,
+        videoUrl: snap.videoUrl,
+        authorName: snap.authorName,
+        authorAvatar: '',
+        publishedAt: snap.snapshotAt,
+        playCount: snap.playCount,
+        likeCount: snap.likeCount,
+        commentCount: snap.commentCount,
+        shareCount: snap.shareCount,
+        matchedKeywords: [],
+        spreadScore: snap.spreadScore,
+        negativeRate: snap.negativeRate,
+        hotComments: [],
+        isNew: false,
+      });
+    }
+  });
+  const nodes: SnapshotNode[] = [];
+  for (let i = 0; i < playSnapshots.length; i++) {
+    const snap = playSnapshots[i];
+    const prevSnap = i > 0 ? playSnapshots[i - 1] : null;
+    const prevEntriesMap = prevSnap ? new Map(prevSnap.entries.map(e => [e.videoId, e])) : new Map();
+    const top = [...snap.entries]
+      .sort((a, b) => b.playCount - a.playCount)
+      .slice(0, 5)
+      .map(e => {
+        const v = allVideosMap.get(e.videoId)!;
+        const prev = prevEntriesMap.get(e.videoId);
+        const prevPlayCount = prev ? prev.playCount : e.playCount;
+        const delta = e.playCount - prevPlayCount;
+        const deltaPercent = prevPlayCount > 0 ? delta / prevPlayCount : 0;
+        return {
+          videoId: e.videoId,
+          videoTitle: v?.title || videoSnapshotsMap[e.videoId]?.title || '未知视频',
+          coverUrl: v?.coverUrl || videoSnapshotsMap[e.videoId]?.coverUrl || '',
+          platform: v?.platform || videoSnapshotsMap[e.videoId]?.platform || 'douyin',
+          videoUrl: v?.videoUrl || videoSnapshotsMap[e.videoId]?.videoUrl || '',
+          playCount: e.playCount,
+          delta,
+          deltaPercent,
+          prevPlayCount,
+        };
+      });
+    nodes.push({ snapshot: snap, topEntries: top });
+  }
+  return nodes;
+}
+
+function normalizeSummary(s: any, videos: Video[]): HandoverSummary {
+  const videosMap = new Map(videos.map(v => [v.id, v]));
+  const highRisk = (s.highRiskVideos || []).map((r: any) => normalizeRiskRecord(r, videosMap));
+  const videoSnapshotsMap = s.videoSnapshots || {};
+  highRisk.forEach(r => {
+    if (!videoSnapshotsMap[r.videoId]) {
+      videoSnapshotsMap[r.videoId] = r.videoSnapshot;
+    }
+  });
+  const tracks = highRisk.map(r => buildVideoTrack(r));
+  const nodes = s.snapshotNodes || buildSnapshotNodes(s.playSnapshots || [], videos, videoSnapshotsMap);
+  return {
+    id: s.id,
+    date: s.date,
+    shiftType: s.shiftType,
+    operatorName: s.operatorName,
+    createdAt: s.createdAt,
+    highRiskVideos: highRisk,
+    playChanges: s.playChanges || [],
+    topGrowers: s.topGrowers || [],
+    playSnapshots: s.playSnapshots || [],
+    videoSnapshots: videoSnapshotsMap,
+    snapshotNodes: nodes,
+    videoTracks: tracks,
+    sentimentStats: s.sentimentStats || { positive: 0, neutral: 0, negative: 0 },
+    contactedDepartments: s.contactedDepartments || [],
+    nextShiftFocus: s.nextShiftFocus || [],
+    confirmedBy: s.confirmedBy,
+  };
+}
+
 function getInitialState() {
   const storedKeywords = loadFromStorage<any[]>('keywords', null);
   const storedPlatforms = loadFromStorage<Platform[]>('platforms', null);
@@ -140,16 +262,18 @@ function getInitialState() {
       v.matchedKeywords.some(mk => enabledKeywordTexts.includes(mk)) ||
       enabledKeywordTexts.some(kw => v.title.includes(kw))
     );
+  } else {
+    videos = [];
   }
   const videosMap = new Map(videos.map(v => [v.id, v]));
-  const hotWords = generateHotWords(videos);
+  const hotWords = enabledKeywordTexts.length > 0 ? generateHotWords(videos) : [];
   const riskRecords = storedRecords && storedRecords.length > 0
     ? storedRecords.map(r => normalizeRiskRecord(r, videosMap))
     : generateSampleRiskRecords(videos);
 
   const initialSnapshot: PlaySnapshot[] = storedSnapshots && storedSnapshots.length > 0
     ? storedSnapshots
-    : [{
+    : (enabledKeywordTexts.length > 0 ? [{
       id: 'ps_' + generateId(),
       type: 'shift_start',
       label: SNAPSHOT_LABEL.shift_start,
@@ -160,7 +284,12 @@ function getInitialState() {
         likeCount: v.likeCount,
         commentCount: v.commentCount,
       })),
-    }];
+    }] : []);
+
+  const summaries = storedSummaries && storedSummaries.length > 0
+    ? storedSummaries.map(s => normalizeSummary(s, videos))
+    : [];
+  const currentShiftSummary = summaries.find(s => !s.confirmedBy) || null;
 
   return {
     keywords,
@@ -169,7 +298,8 @@ function getInitialState() {
     videos,
     hotWords,
     riskRecords,
-    storedSummaries,
+    summaries,
+    currentShiftSummary,
     playSnapshots: initialSnapshot,
   };
 }
@@ -186,8 +316,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   hotWords: init.hotWords,
   selectedVideo: null,
   riskRecords: init.riskRecords,
-  summaries: init.storedSummaries || [],
-  currentShiftSummary: null,
+  summaries: init.summaries || [],
+  currentShiftSummary: init.currentShiftSummary || null,
   playSnapshots: init.playSnapshots,
 
   addKeyword: (text, category) => {
@@ -270,7 +400,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   recordPlaySnapshot: (type, label) => {
-    const { videos } = get();
+    const { videos, riskRecords } = get();
     if (videos.length === 0) return null;
     const snap: PlaySnapshot = {
       id: 'ps_' + generateId(),
@@ -284,9 +414,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
         commentCount: v.commentCount,
       })),
     };
+
+    const videosMap = new Map(videos.map(v => [v.id, v]));
+    const updatedRisk = riskRecords.map(r => {
+      const v = videosMap.get(r.videoId);
+      const playCount = v ? v.playCount : r.currentPlayCount;
+      const last = r.playHistory[r.playHistory.length - 1];
+      const newPoint: PlayHistoryPoint = { at: snap.at, playCount, snapshotType: type };
+      let newHistory = r.playHistory;
+      if (last && last.snapshotType === type && snap.at - last.at < 5000) {
+        newHistory = [...r.playHistory.slice(0, -1), newPoint];
+      } else {
+        newHistory = [...r.playHistory, newPoint];
+      }
+      return {
+        ...r,
+        currentPlayCount: playCount,
+        playHistory: newHistory,
+        updatedAt: snap.at,
+      };
+    });
+
     const next = [...get().playSnapshots, snap].slice(-20);
-    set({ playSnapshots: next });
-    saveToStorage('playSnapshots', next);
+    if (JSON.stringify(riskRecords) !== JSON.stringify(updatedRisk)) {
+      set({ playSnapshots: next, riskRecords: updatedRisk });
+      saveToStorage('playSnapshots', next);
+      saveToStorage('riskRecords', updatedRisk);
+    } else {
+      set({ playSnapshots: next });
+      saveToStorage('playSnapshots', next);
+    }
     return snap;
   },
 
@@ -424,36 +581,40 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const genSnap = get().recordPlaySnapshot('generate_summary');
     const allSnaps = genSnap ? [...existingSnaps, genSnap] : existingSnaps;
-
     const currentVideosMap = new Map(videos.map(v => [v.id, v]));
-
     const highRisk = riskRecords.filter(r =>
       r.riskLevel === 'high' || r.riskLevel === 'urgent'
     );
-
     const updatedRecords = highRisk.map(r => {
       const currentVideo = currentVideosMap.get(r.videoId);
       const snapshotPlay = currentVideo ? currentVideo.playCount : r.currentPlayCount;
+      const last = r.playHistory[r.playHistory.length - 1];
       const historyItem: PlayHistoryPoint = {
         at: Date.now(),
         playCount: snapshotPlay,
         snapshotType: 'generate_summary',
       };
-      const lastHistory = r.playHistory[r.playHistory.length - 1];
-      const mergedHistory = lastHistory && lastHistory.snapshotType === 'generate_summary'
-        ? [...r.playHistory.slice(0, -1), historyItem]
-        : [...r.playHistory, historyItem];
+      let newHistory = r.playHistory;
+      if (last && last.snapshotType === 'generate_summary' && Date.now() - last.at < 5000) {
+        newHistory = [...r.playHistory.slice(0, -1), historyItem];
+      } else {
+        newHistory = [...r.playHistory, historyItem];
+      }
       return {
         ...r,
         currentPlayCount: snapshotPlay,
-        playHistory: mergedHistory,
+        playHistory: newHistory,
         updatedAt: Date.now(),
       };
     });
 
     const playChanges = updatedRecords.map(r => {
-      const delta = r.currentPlayCount - r.initialPlayCount;
-      const deltaPercent = r.initialPlayCount > 0 ? delta / r.initialPlayCount : 0;
+      const last = r.playHistory[r.playHistory.length - 1];
+      const first = r.playHistory[0];
+      const latestPc = last?.playCount ?? r.currentPlayCount;
+      const initialPc = first?.playCount ?? r.initialPlayCount;
+      const delta = latestPc - initialPc;
+      const deltaPercent = initialPc > 0 ? delta / initialPc : 0;
       return { videoId: r.videoId, delta, deltaPercent };
     });
 
@@ -549,6 +710,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       nextFocus.push(`重点关注播放量激增的 Top${Math.min(3, topGrowers.length)} 条视频`);
     }
 
+    const snapshotNodes = buildSnapshotNodes(allSnaps.slice(-10), videos, videoSnapshotsMap);
+    const videoTracks = updatedRecords.map(r => buildVideoTrack(r));
+
     const summary: HandoverSummary = {
       id: 's_' + generateId(),
       date: new Date().toISOString().slice(0, 10),
@@ -560,6 +724,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       topGrowers,
       playSnapshots: allSnaps.slice(-10),
       videoSnapshots: videoSnapshotsMap,
+      snapshotNodes,
+      videoTracks,
       sentimentStats: {
         positive: positive / total,
         neutral: neutral / total,

@@ -1,22 +1,45 @@
 import { useState } from 'react';
-import { ExternalLink, TrendingUp, Play, MessageSquare, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
+import { ExternalLink, TrendingUp, Play, MessageSquare, AlertTriangle, Copy, Check } from 'lucide-react';
 import type { RiskRecord, Video, PlayChange } from '@/types';
-import { PLATFORM_META, RISK_LEVEL_META, RISK_TYPE_META, STATUS_META } from '@/types';
+import { RISK_LEVEL_META, RISK_TYPE_META, STATUS_META, PLATFORM_META } from '@/types';
 import { formatNumber, formatPercent, formatRelativeTime } from '@/utils/format';
 import PlatformBadge from '@/components/shared/PlatformBadge';
 import { RiskLevelBadge } from '@/components/shared/RiskBadge';
 
 interface HighRiskTableProps {
   records: RiskRecord[];
-  videos: Video[];
   playChanges: PlayChange[];
-  onOpenVideo?: (video: Video) => void;
+  videoSnapshots?: Record<string, import('@/types').VideoSnapshot>;
+  onOpenVideo?: (videoLike: Video) => void;
+}
+
+function snapshotToVideo(snap: import('@/types').VideoSnapshot): Video {
+  return {
+    id: snap.videoId,
+    platform: snap.platform,
+    title: snap.title,
+    coverUrl: snap.coverUrl,
+    videoUrl: snap.videoUrl,
+    authorName: snap.authorName,
+    authorAvatar: '',
+    publishedAt: snap.snapshotAt,
+    playCount: snap.playCount,
+    likeCount: snap.likeCount,
+    commentCount: snap.commentCount,
+    shareCount: snap.shareCount,
+    matchedKeywords: [],
+    spreadScore: snap.spreadScore,
+    negativeRate: snap.negativeRate,
+    hotComments: [],
+    isNew: false,
+  };
 }
 
 function CopyableLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!url) return;
     navigator.clipboard.writeText(url).catch(() => {
       const ta = document.createElement('textarea');
       ta.value = url;
@@ -30,31 +53,34 @@ function CopyableLink({ url }: { url: string }) {
   };
   return (
     <div className="flex items-center gap-1 max-w-[200px]">
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={e => e.stopPropagation()}
-        className="text-xs text-keyword-brand hover:text-keyword-brand/80 truncate font-mono underline decoration-keyword-brand/30 hover:decoration-keyword-brand/60"
-        title={url}
-      >
-        {url.length > 30 ? url.slice(0, 30) + '...' : url}
-      </a>
-      <button
-        onClick={handleCopy}
-        className="shrink-0 p-0.5 rounded hover:bg-slate-700/50 text-slate-500 hover:text-slate-300 transition-colors"
-        title="复制链接"
-      >
-        {copied ? <Check className="w-3 h-3 text-risk-low" /> : <Copy className="w-3 h-3" />}
-      </button>
+      {url ? (
+        <>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-keyword-brand hover:text-keyword-brand/80 truncate font-mono underline decoration-keyword-brand/30 hover:decoration-keyword-brand/60"
+            title={url}
+          >
+            {url.length > 32 ? url.slice(0, 32) + '...' : url}
+          </a>
+          <button
+            onClick={handleCopy}
+            className="shrink-0 p-0.5 rounded hover:bg-slate-700/50 text-slate-500 hover:text-slate-300 transition-colors"
+            title="复制链接"
+          >
+            {copied ? <Check className="w-3 h-3 text-risk-low" /> : <Copy className="w-3 h-3" />}
+          </button>
+        </>
+      ) : (
+        <span className="text-slate-600 text-xs">-</span>
+      )}
     </div>
   );
 }
 
-export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: HighRiskTableProps) {
-  const getVideo = (id: string) => videos.find(v => v.id === id);
-  const getChange = (id: string) => playChanges.find(c => c.videoId === id);
-
+export function HighRiskTable({ records, playChanges, onOpenVideo }: HighRiskTableProps) {
   if (records.length === 0) {
     return (
       <div className="card-gradient-border rounded-xl p-8 animate-fade-in">
@@ -85,7 +111,7 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
           </div>
           <div>
             <h3 className="text-lg font-bold text-white">高风险视频汇总</h3>
-            <p className="text-xs text-slate-400">共 {records.length} 条需下一班重点跟进</p>
+            <p className="text-xs text-slate-400">共 {records.length} 条需下一班重点跟进，所有视频信息已固化至交班摘要</p>
           </div>
         </div>
         <span className="px-3 py-1 rounded-full text-xs font-medium bg-risk-urgent/10 text-risk-urgent border border-risk-urgent/30">
@@ -101,6 +127,7 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
               <th className="text-left px-4 py-3 font-medium">风险等级</th>
               <th className="text-left px-4 py-3 font-medium">风险类型</th>
               <th className="text-left px-4 py-3 font-medium">研判意见</th>
+              <th className="text-right px-4 py-3 font-medium">初始播放</th>
               <th className="text-right px-4 py-3 font-medium">当前播放</th>
               <th className="text-right px-4 py-3 font-medium">播放增量</th>
               <th className="text-left px-4 py-3 font-medium">原视频链接</th>
@@ -111,9 +138,8 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
           </thead>
           <tbody className="divide-y divide-slate-700/40">
             {records.map((r, idx) => {
-              const v = getVideo(r.videoId);
-              const change = getChange(r.videoId);
-              const levelMeta = RISK_LEVEL_META[r.riskLevel];
+              const snap = r.videoSnapshot;
+              const change = playChanges.find(c => c.videoId === r.videoId);
               const typeMeta = RISK_TYPE_META[r.riskType];
               const statusMeta = STATUS_META[r.status];
               const isSignificant = change && (change.deltaPercent > 0.15 || change.delta > 5000);
@@ -126,22 +152,24 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
                 >
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3 max-w-xs">
-                      {v ? (
-                        <>
-                          <div className="relative w-14 h-10 rounded-md overflow-hidden flex-shrink-0 border border-slate-700">
-                            <img src={v.coverUrl} alt="" className="w-full h-full object-cover" />
+                      <div className="relative w-14 h-10 rounded-md overflow-hidden flex-shrink-0 border border-slate-700 bg-slate-800">
+                        {snap.coverUrl ? (
+                          <img src={snap.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-lg">
+                            {PLATFORM_META[snap.platform].icon}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-slate-200 font-medium truncate">{v.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <PlatformBadge platform={v.platform} size="sm" />
-                              <span className="text-xs text-slate-500">@{v.authorName}</span>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-slate-500 text-xs">视频已下线</span>
-                      )}
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-slate-200 font-medium truncate">{snap.title || '[视频已下线]'}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <PlatformBadge platform={snap.platform} size="sm" />
+                          {snap.authorName && (
+                            <span className="text-xs text-slate-500">@{snap.authorName}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </td>
 
@@ -163,9 +191,16 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
                   </td>
 
                   <td className="px-4 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1 text-slate-400 font-mono text-xs">
+                      <Play className="w-3 h-3" />
+                      {formatNumber(r.initialPlayCount)}
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-1 text-slate-200 font-mono">
                       <Play className="w-3 h-3 text-slate-500" />
-                      {v ? formatNumber(v.playCount) : '-'}
+                      {formatNumber(r.currentPlayCount)}
                     </div>
                   </td>
 
@@ -179,12 +214,12 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
                         <span className="text-xs opacity-75">({formatPercent(change.deltaPercent)})</span>
                       </div>
                     ) : (
-                      <span className="text-slate-600 text-xs">-</span>
+                      <span className="text-slate-600 text-xs">—</span>
                     )}
                   </td>
 
                   <td className="px-4 py-4">
-                    {v ? <CopyableLink url={v.videoUrl} /> : <span className="text-slate-600 text-xs">-</span>}
+                    <CopyableLink url={snap.videoUrl} />
                   </td>
 
                   <td className="px-4 py-4">
@@ -202,15 +237,13 @@ export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: Hig
                   </td>
 
                   <td className="px-4 py-4 text-center">
-                    {v && (
-                      <button
-                        onClick={() => onOpenVideo?.(v)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        处置
-                      </button>
-                    )}
+                    <button
+                      onClick={() => onOpenVideo?.(snapshotToVideo(snap))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      处置
+                    </button>
                   </td>
                 </tr>
               );

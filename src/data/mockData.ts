@@ -1,5 +1,5 @@
 import type {
-  Video, Comment, HotWord, Keyword, RiskRecord,
+  Video, Comment, HotWord, Keyword, RiskRecord, VideoSnapshot,
   Platform, KeywordCategory, Sentiment, RiskType, RiskLevel
 } from '@/types';
 import { PLATFORM_META } from '@/types';
@@ -27,7 +27,7 @@ const STORE_NAMES = ['旗舰店', '北京国贸店', '上海陆家嘴店', '广�
 const AMBASSADORS = ['李明轩', '张雨晴', '陈子墨', '苏晚'];
 const COMPETITORS = ['紫光手机', '银河数码', '极光科技'];
 
-const DEFAULT_KEYWORDS: Omit<Keyword, 'id' | 'createdAt'>[] = [
+const DEFAULT_KEYWORDS: Array<{ text: string; category: Keyword['category'] }> = [
   { text: '星澜科技', category: 'brand' },
   { text: '星澜手机', category: 'product' },
   { text: '星澜X1', category: 'product' },
@@ -242,6 +242,7 @@ export function generateDefaultKeywords(): Keyword[] {
     id: generateId(),
     text: k.text,
     category: k.category,
+    enabled: true,
     createdAt: now - i * 86400000,
   }));
 }
@@ -401,6 +402,23 @@ export function generateSampleRiskRecords(videos: Video[]): RiskRecord[] {
 
   return highRiskVideos.map((v, i) => {
     const riskLevel = i === 0 ? 'urgent' : riskLevels[randInt(1, 3)];
+    const initialPc = Math.floor(v.playCount * (0.4 + rand() * 0.3));
+    const markTime = v.publishedAt + randInt(600000, 3600000);
+    const snapshot: VideoSnapshot = {
+      videoId: v.id,
+      title: v.title,
+      coverUrl: v.coverUrl,
+      videoUrl: v.videoUrl,
+      platform: v.platform,
+      authorName: v.authorName,
+      playCount: initialPc,
+      likeCount: v.likeCount,
+      commentCount: v.commentCount,
+      shareCount: v.shareCount,
+      spreadScore: v.spreadScore,
+      negativeRate: v.negativeRate,
+      snapshotAt: markTime,
+    };
     return {
       id: 'r_' + generateId(),
       videoId: v.id,
@@ -413,9 +431,15 @@ export function generateSampleRiskRecords(videos: Video[]): RiskRecord[] {
         i === 0 ? '15:30 已联系客服主管，排查该用户订单' : '',
         i === 1 ? '16:00 市场部正在准备回应口径' : '',
       ].filter(Boolean),
-      initialPlayCount: Math.floor(v.playCount * 0.6),
+      initialPlayCount: initialPc,
       currentPlayCount: v.playCount,
-      createdAt: v.publishedAt + randInt(600000, 3600000),
+      playHistory: [
+        { at: markTime, playCount: initialPc, snapshotType: 'mark_risk' },
+        { at: markTime + 3600000, playCount: Math.floor(initialPc * 1.12), snapshotType: 'manual_refresh' },
+        { at: Date.now() - 1800000, playCount: v.playCount, snapshotType: 'generate_summary' },
+      ],
+      videoSnapshot: snapshot,
+      createdAt: markTime,
       updatedAt: Date.now() - randInt(600000, 7200000),
       operator: operators[i % operators.length],
     };

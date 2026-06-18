@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, History, FileSearch, Eye } from 'lucide-react';
+import { ArrowLeft, RefreshCw, History, FileSearch, Eye, Sparkles } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { SHIFT_META, type ShiftType, type HandoverSummary, type Video } from '@/types';
-import { formatDateTime, formatRelativeTime } from '@/utils/format';
+import { formatDateTime, formatNumber, formatRelativeTime, formatPercent } from '@/utils/format';
 import StatCard from '@/components/shared/StatCard';
 import EmptyState from '@/components/shared/EmptyState';
 import { ShiftInfoBar } from '@/components/handover/ShiftInfoBar';
@@ -11,6 +11,8 @@ import { HighRiskTable } from '@/components/handover/HighRiskTable';
 import { SentimentChart } from '@/components/handover/SentimentChart';
 import { CollaborationTimeline } from '@/components/handover/CollaborationTimeline';
 import { SummaryExportPanel } from '@/components/handover/SummaryExportPanel';
+import { TopGrowersCard } from '@/components/handover/TopGrowersCard';
+import { cn } from '@/lib/utils';
 
 export default function HandoverPage() {
   const navigate = useNavigate();
@@ -281,10 +283,11 @@ export default function HandoverPage() {
 
           <HighRiskTable
             records={activeSummary.highRiskVideos}
-            videos={videos}
             playChanges={activeSummary.playChanges}
             onOpenVideo={handleOpenVideo}
           />
+
+          <TopGrowersCard growers={activeSummary.topGrowers || []} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <SentimentChart stats={activeSummary.sentimentStats} />
@@ -296,7 +299,6 @@ export default function HandoverPage() {
 
           <SummaryExportPanel
             summary={activeSummary}
-            videos={videos}
             onConfirm={handleConfirm}
           />
         </>

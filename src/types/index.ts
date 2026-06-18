@@ -6,11 +6,13 @@ export type Department = 'customer_service' | 'legal' | 'product' | 'marketing' 
 export type KeywordCategory = 'brand' | 'product' | 'store' | 'ambassador' | 'competitor';
 export type ShiftType = 'morning' | 'evening';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
+export type SnapshotType = 'shift_start' | 'manual_refresh' | 'mark_risk' | 'generate_summary';
 
 export interface Keyword {
   id: string;
   text: string;
   category: KeywordCategory;
+  enabled: boolean;
   createdAt: number;
 }
 
@@ -44,10 +46,32 @@ export interface Video {
   isNew: boolean;
 }
 
+export interface VideoSnapshot {
+  videoId: string;
+  title: string;
+  coverUrl: string;
+  videoUrl: string;
+  platform: Platform;
+  authorName: string;
+  playCount: number;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  spreadScore: number;
+  negativeRate: number;
+  snapshotAt: number;
+}
+
 export interface HotWord {
   word: string;
   frequency: number;
   sentiment: Sentiment;
+}
+
+export interface PlayHistoryPoint {
+  at: number;
+  playCount: number;
+  snapshotType: SnapshotType;
 }
 
 export interface RiskRecord {
@@ -61,6 +85,8 @@ export interface RiskRecord {
   handleNotes: string[];
   initialPlayCount: number;
   currentPlayCount: number;
+  playHistory: PlayHistoryPoint[];
+  videoSnapshot: VideoSnapshot;
   createdAt: number;
   updatedAt: number;
   operator: string;
@@ -70,6 +96,24 @@ export interface PlayChange {
   videoId: string;
   delta: number;
   deltaPercent: number;
+}
+
+export interface TopGrower extends PlayChange {
+  videoTitle: string;
+  videoUrl: string;
+  coverUrl: string;
+  platform: Platform;
+  initialPlayCount: number;
+  latestPlayCount: number;
+  riskLevel?: RiskLevel;
+}
+
+export interface PlaySnapshot {
+  id: string;
+  type: SnapshotType;
+  label: string;
+  at: number;
+  entries: { videoId: string; playCount: number; likeCount: number; commentCount: number }[];
 }
 
 export interface ContactedDept {
@@ -86,6 +130,9 @@ export interface HandoverSummary {
   createdAt: number;
   highRiskVideos: RiskRecord[];
   playChanges: PlayChange[];
+  topGrowers: TopGrower[];
+  playSnapshots: PlaySnapshot[];
+  videoSnapshots: Record<string, VideoSnapshot>;
   sentimentStats: { positive: number; neutral: number; negative: number };
   contactedDepartments: ContactedDept[];
   nextShiftFocus: string[];
@@ -105,6 +152,13 @@ export interface CreateRiskPayload {
   opinion: string;
   operator: string;
 }
+
+export const SNAPSHOT_LABEL: Record<SnapshotType, string> = {
+  shift_start: '班次开始',
+  manual_refresh: '手动刷新',
+  mark_risk: '风险标记',
+  generate_summary: '生成交班',
+};
 
 export const PLATFORM_META: Record<Platform, { name: string; color: string; icon: string; urlPrefix: string }> = {
   douyin: { name: '抖音', color: '#000000', icon: '🎵', urlPrefix: 'https://www.douyin.com/video/' },

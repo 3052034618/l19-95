@@ -1,21 +1,19 @@
 import { useState } from 'react';
 import { FileText, Copy, Check, Download, Handshake, AlertCircle, Sparkles } from 'lucide-react';
-import type { HandoverSummary, Video } from '@/types';
+import type { HandoverSummary } from '@/types';
 import { RISK_LEVEL_META, SHIFT_META, PLATFORM_META } from '@/types';
 import { formatNumber, formatPercent } from '@/utils/format';
 
 interface SummaryExportPanelProps {
   summary: HandoverSummary;
-  videos: Video[];
   onConfirm: (confirmedBy: string) => void;
 }
 
-export function SummaryExportPanel({ summary, videos, onConfirm }: SummaryExportPanelProps) {
+export function SummaryExportPanel({ summary, onConfirm }: SummaryExportPanelProps) {
   const [copied, setCopied] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmName, setConfirmName] = useState('');
 
-  const getVideo = (id: string) => videos.find(v => v.id === id);
   const shiftMeta = SHIFT_META[summary.shiftType];
 
   const generateText = () => {
@@ -31,15 +29,15 @@ export function SummaryExportPanel({ summary, videos, onConfirm }: SummaryExport
       lines.push('  ✓ 本班次无高风险视频');
     } else {
       summary.highRiskVideos.forEach((r, i) => {
-        const v = getVideo(r.videoId);
+        const snap = r.videoSnapshot;
         const change = summary.playChanges.find(c => c.videoId === r.videoId);
-        lines.push(`  ${i + 1}. [${RISK_LEVEL_META[r.riskLevel].name}] ${v?.title || '视频'}`);
-        lines.push(`     平台：${v ? PLATFORM_META[v.platform].name : '-'} | 播放：${v ? formatNumber(v.playCount) : '-'}`);
+        lines.push(`  ${i + 1}. [${RISK_LEVEL_META[r.riskLevel].name}] ${snap.title || '[视频已下线]'}`);
+        lines.push(`     平台：${PLATFORM_META[snap.platform].name} | 初始播放：${formatNumber(r.initialPlayCount)} | 当前播放：${formatNumber(r.currentPlayCount)}`);
         if (change && change.delta > 0) {
           lines.push(`     增量：+${formatNumber(change.delta)} (${formatPercent(change.deltaPercent)})`);
         }
-        if (v?.videoUrl) {
-          lines.push(`     链接：${v.videoUrl}`);
+        if (snap.videoUrl) {
+          lines.push(`     链接：${snap.videoUrl}`);
         }
         lines.push(`     研判：${r.opinion}`);
         lines.push('');

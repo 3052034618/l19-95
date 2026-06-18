@@ -7,8 +7,28 @@ import { cn } from '@/lib/utils';
 
 export default function SpreadAlertCard() {
   const videos = useAppStore(s => s.videos);
+  const keywords = useAppStore(s => s.config.keywords);
   const selectVideo = useAppStore(s => s.selectVideo);
   const navigate = useNavigate();
+
+  if (keywords.length === 0) {
+    return (
+      <div className="rounded-lg border border-risk-urgent/30 bg-monitor-card overflow-hidden animate-fade-in" style={{ animationDelay: '300ms' }}>
+        <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-risk-urgent/20 via-risk-high/10 to-transparent border-b border-risk-urgent/20">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Zap size={16} className="text-risk-urgent" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-200">传播苗头预警</h3>
+          </div>
+          <TrendingUp size={15} className="text-risk-high" />
+        </div>
+        <div className="p-8 text-center text-monitor-muted text-sm">
+          添加巡检关键词后，传播苗头预警将自动刷新
+        </div>
+      </div>
+    );
+  }
 
   const alerts = videos
     .filter(v => v.spreadScore >= 70 || v.negativeRate >= 0.35)

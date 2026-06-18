@@ -49,7 +49,15 @@ function getInitialState() {
   const keywords = storedKeywords || generateDefaultKeywords();
   const platforms = storedPlatforms || defaultPlatforms;
   const timeRangeHours = storedRange || 12;
-  const videos = generateVideos(timeRangeHours);
+  const keywordTexts = keywords.map((k: Keyword) => k.text);
+  let videos = generateVideos(timeRangeHours);
+  videos = videos.filter((v: Video) => platforms.includes(v.platform));
+  if (keywordTexts.length > 0) {
+    videos = videos.filter((v: Video) =>
+      v.matchedKeywords.some((mk: string) => keywordTexts.includes(mk)) ||
+      keywordTexts.some((kw: string) => v.title.includes(kw))
+    );
+  }
   const hotWords = generateHotWords(videos);
   const riskRecords = storedRecords && storedRecords.length > 0
     ? storedRecords
@@ -78,12 +86,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const newKeywords = [...get().config.keywords, kw];
     set(state => ({ config: { ...state.config, keywords: newKeywords } }));
     saveToStorage('keywords', newKeywords);
+    get().fetchVideos();
   },
 
   removeKeyword: (id) => {
     const newKeywords = get().config.keywords.filter(k => k.id !== id);
     set(state => ({ config: { ...state.config, keywords: newKeywords } }));
     saveToStorage('keywords', newKeywords);
+    get().fetchVideos();
   },
 
   togglePlatform: (p) => {
@@ -101,9 +111,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   fetchVideos: () => {
-    const { timeRangeHours, platforms } = get().config;
+    const { timeRangeHours, platforms, keywords } = get().config;
+    const keywordTexts = keywords.map(k => k.text);
+
+    if (keywordTexts.length === 0) {
+      set({ videos: [], hotWords: [] });
+      return;
+    }
+
     let videos = generateVideos(timeRangeHours);
     videos = videos.filter(v => platforms.includes(v.platform));
+    videos = videos.filter(v =>
+      v.matchedKeywords.some(mk => keywordTexts.includes(mk)) ||
+      keywordTexts.some(kw => v.title.includes(kw))
+    );
     const hotWords = generateHotWords(videos);
     set({ videos, hotWords });
   },
@@ -186,7 +207,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       r.riskLevel === 'high' || r.riskLevel === 'urgent'
     );
 
-    const playChanges = highRisk.map(r => {
+    const updatedRecords = highRisk.map(r => {
+      const currentVideo = videos.find(v => v.id === r.videoId);
+      const currentPlayCount = currentVideo ? currentVideo.playCount : r.currentPlayCount;
+      return { ...r, currentPlayCount };
+    });
+
+    const playChanges = updatedRecords.map(r => {
       const delta = r.currentPlayCount - r.initialPlayCount;
       const deltaPercent = r.initialPlayCount > 0 ? delta / r.initialPlayCount : 0;
       return { videoId: r.videoId, delta, deltaPercent };
@@ -201,7 +228,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const total = positive + neutral + negative || 1;
 
     const deptSet = new Map<Department, ContactedDept>();
-    highRisk.forEach(r => r.contactDepartments.forEach(d => {
+    updatedRecords.forEach(r => r.contactDepartments.forEach(d => {
       if (!deptSet.has(d)) {
         const deptNames: Record<Department, string> = {
           customer_service: '客服部', legal: '法务部', product: '产品部',
@@ -215,7 +242,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
     }));
 
-    const nextFocus = highRisk
+    const nextFocus = updatedRecords
       .filter(r => r.status !== 'resolved')
       .slice(0, 5)
       .map(r => {
@@ -230,7 +257,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       shiftType,
       operatorName,
       createdAt: Date.now(),
-      highRiskVideos: highRisk,
+      highRiskVideos: updatedRecords,
       playChanges,
       sentimentStats: {
         positive: positive / total,
@@ -242,8 +269,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     };
 
     const newSummaries = [summary, ...get().summaries];
-    set({ summaries: newSummaries, currentShiftSummary: summary });
+    const updatedRiskRecords = get().riskRecords.map(r => {
+      const updated = updatedRecords.find(u => u.id === r.id);
+      return updated ? { ...r, currentPlayCount: updated.currentPlayCount, updatedAt: Date.now() } : r;
+    });
+    set({ summaries: newSummaries, currentShiftSummary: summary, riskRecords: updatedRiskRecords });
     saveToStorage('summaries', newSummaries);
+    saveToStorage('riskRecords', updatedRiskRecords);
     return summary;
   },
 

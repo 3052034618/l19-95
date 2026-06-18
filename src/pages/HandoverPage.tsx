@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, History, FileSearch, Eye } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { SHIFT_META, type ShiftType, type HandoverSummary } from '@/types';
+import { SHIFT_META, type ShiftType, type HandoverSummary, type Video } from '@/types';
 import { formatDateTime, formatRelativeTime } from '@/utils/format';
 import StatCard from '@/components/shared/StatCard';
 import EmptyState from '@/components/shared/EmptyState';
@@ -22,6 +22,7 @@ export default function HandoverPage() {
     generateSummary,
     confirmHandover,
     setCurrentSummary,
+    selectVideo,
   } = useAppStore();
 
   const [shiftType, setShiftType] = useState<ShiftType>(
@@ -47,6 +48,11 @@ export default function HandoverPage() {
     }
     return currentShiftSummary;
   }, [activeSummaryId, summaries, currentShiftSummary]);
+
+  const handleOpenVideo = (video: Video) => {
+    selectVideo(video);
+    navigate('/risk');
+  };
 
   const handleGenerate = () => {
     setIsGenerating(true);
@@ -277,6 +283,7 @@ export default function HandoverPage() {
             records={activeSummary.highRiskVideos}
             videos={videos}
             playChanges={activeSummary.playChanges}
+            onOpenVideo={handleOpenVideo}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

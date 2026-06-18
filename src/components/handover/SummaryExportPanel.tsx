@@ -38,6 +38,9 @@ export function SummaryExportPanel({ summary, videos, onConfirm }: SummaryExport
         if (change && change.delta > 0) {
           lines.push(`     增量：+${formatNumber(change.delta)} (${formatPercent(change.deltaPercent)})`);
         }
+        if (v?.videoUrl) {
+          lines.push(`     链接：${v.videoUrl}`);
+        }
         lines.push(`     研判：${r.opinion}`);
         lines.push('');
       });

@@ -2,6 +2,7 @@ import type {
   Video, Comment, HotWord, Keyword, RiskRecord,
   Platform, KeywordCategory, Sentiment, RiskType, RiskLevel
 } from '@/types';
+import { PLATFORM_META } from '@/types';
 import { generateId } from '@/utils/format';
 
 // ===== 种子随机函数 =====
@@ -300,6 +301,7 @@ export function generateVideos(timeRangeHours: number, count: number = 40): Vide
       platform,
       title,
       coverUrl: generateCover(title),
+      videoUrl: PLATFORM_META[platform].urlPrefix + generateId(),
       authorName: pick(USER_NAMES),
       authorAvatar: '',
       publishedAt,

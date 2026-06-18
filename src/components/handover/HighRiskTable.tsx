@@ -1,4 +1,5 @@
-import { ExternalLink, TrendingUp, Play, MessageSquare, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { ExternalLink, TrendingUp, Play, MessageSquare, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
 import type { RiskRecord, Video, PlayChange } from '@/types';
 import { PLATFORM_META, RISK_LEVEL_META, RISK_TYPE_META, STATUS_META } from '@/types';
 import { formatNumber, formatPercent, formatRelativeTime } from '@/utils/format';
@@ -9,9 +10,48 @@ interface HighRiskTableProps {
   records: RiskRecord[];
   videos: Video[];
   playChanges: PlayChange[];
+  onOpenVideo?: (video: Video) => void;
 }
 
-export function HighRiskTable({ records, videos, playChanges }: HighRiskTableProps) {
+function CopyableLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(url).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="flex items-center gap-1 max-w-[200px]">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        className="text-xs text-keyword-brand hover:text-keyword-brand/80 truncate font-mono underline decoration-keyword-brand/30 hover:decoration-keyword-brand/60"
+        title={url}
+      >
+        {url.length > 30 ? url.slice(0, 30) + '...' : url}
+      </a>
+      <button
+        onClick={handleCopy}
+        className="shrink-0 p-0.5 rounded hover:bg-slate-700/50 text-slate-500 hover:text-slate-300 transition-colors"
+        title="复制链接"
+      >
+        {copied ? <Check className="w-3 h-3 text-risk-low" /> : <Copy className="w-3 h-3" />}
+      </button>
+    </div>
+  );
+}
+
+export function HighRiskTable({ records, videos, playChanges, onOpenVideo }: HighRiskTableProps) {
   const getVideo = (id: string) => videos.find(v => v.id === id);
   const getChange = (id: string) => playChanges.find(c => c.videoId === id);
 
@@ -63,6 +103,7 @@ export function HighRiskTable({ records, videos, playChanges }: HighRiskTablePro
               <th className="text-left px-4 py-3 font-medium">研判意见</th>
               <th className="text-right px-4 py-3 font-medium">当前播放</th>
               <th className="text-right px-4 py-3 font-medium">播放增量</th>
+              <th className="text-left px-4 py-3 font-medium">原视频链接</th>
               <th className="text-left px-4 py-3 font-medium">状态</th>
               <th className="text-left px-4 py-3 font-medium">标记时间</th>
               <th className="text-center px-4 py-3 font-medium">操作</th>
@@ -143,6 +184,10 @@ export function HighRiskTable({ records, videos, playChanges }: HighRiskTablePro
                   </td>
 
                   <td className="px-4 py-4">
+                    {v ? <CopyableLink url={v.videoUrl} /> : <span className="text-slate-600 text-xs">-</span>}
+                  </td>
+
+                  <td className="px-4 py-4">
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs ${statusMeta.bg} ${statusMeta.color}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${
                         r.status === 'pending' ? 'bg-risk-urgent animate-pulse' :
@@ -158,13 +203,13 @@ export function HighRiskTable({ records, videos, playChanges }: HighRiskTablePro
 
                   <td className="px-4 py-4 text-center">
                     {v && (
-                      <a
-                        href={`#/risk?video=${v.id}`}
+                      <button
+                        onClick={() => onOpenVideo?.(v)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                       >
                         <ExternalLink className="w-3 h-3" />
                         处置
-                      </a>
+                      </button>
                     )}
                   </td>
                 </tr>

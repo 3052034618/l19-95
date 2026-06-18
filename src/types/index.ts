@@ -29,6 +29,7 @@ export interface Video {
   platform: Platform;
   title: string;
   coverUrl: string;
+  videoUrl: string;
   authorName: string;
   authorAvatar: string;
   publishedAt: number;
@@ -105,12 +106,12 @@ export interface CreateRiskPayload {
   operator: string;
 }
 
-export const PLATFORM_META: Record<Platform, { name: string; color: string; icon: string }> = {
-  douyin: { name: '抖音', color: '#000000', icon: '🎵' },
-  kuaishou: { name: '快手', color: '#FF4906', icon: '⚡' },
-  shipinhao: { name: '视频号', color: '#07C160', icon: '📱' },
-  bilibili: { name: 'B站', color: '#FB7299', icon: '📺' },
-  xiaohongshu: { name: '小红书', color: '#FE2C55', icon: '📕' },
+export const PLATFORM_META: Record<Platform, { name: string; color: string; icon: string; urlPrefix: string }> = {
+  douyin: { name: '抖音', color: '#000000', icon: '🎵', urlPrefix: 'https://www.douyin.com/video/' },
+  kuaishou: { name: '快手', color: '#FF4906', icon: '⚡', urlPrefix: 'https://www.kuaishou.com/short-video/' },
+  shipinhao: { name: '视频号', color: '#07C160', icon: '📱', urlPrefix: 'https://channels.weixin.qq.com/' },
+  bilibili: { name: 'B站', color: '#FB7299', icon: '📺', urlPrefix: 'https://www.bilibili.com/video/' },
+  xiaohongshu: { name: '小红书', color: '#FE2C55', icon: '📕', urlPrefix: 'https://www.xiaohongshu.com/explore/' },
 };
 
 export const RISK_TYPE_META: Record<RiskType, { name: string; emoji: string; color: string }> = {
